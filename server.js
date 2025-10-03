@@ -5,8 +5,8 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const sharp = require('sharp');
 const { google } = require('googleapis');
-const cors = require('cors');
 const axios = require('axios');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
@@ -16,7 +16,13 @@ app.use(bodyParser.json({ limit: '2gb' })); // permitir vídeos grandes
 const tempFolder = path.join(__dirname, 'videos');
 if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder);
 
-// --- Rota de upload/render ---
+// --- Função para extrair FILE_ID do link do Drive ---
+function extractDriveFileId(url) {
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+// --- Rota upload/render ---
 app.post('/upload', async (req, res) => {
   try {
     const {
@@ -26,33 +32,34 @@ app.post('/upload', async (req, res) => {
       title,
       description,
       publishAt,
-      video_url,
+      video: videoUrl,
       thumbnail
     } = req.body;
 
     // Validar campos obrigatórios
-    if (!client_id || !client_secret || !refresh_token || !title || !description || !publishAt || !video_url || !thumbnail) {
+    if (!client_id || !client_secret || !refresh_token || !title || !description || !publishAt || !videoUrl || !thumbnail) {
       return res.status(400).json({ success: false, message: 'Todos os campos são obrigatórios' });
     }
 
-    // --- Download do vídeo do Google Drive ---
-    const videoPath = path.join(tempFolder, `video_${Date.now()}.mp4`);
-    const driveResponse = await axios.get(video_url, {
-      responseType: 'stream'
-    });
-    const writer = fs.createWriteStream(videoPath);
-    driveResponse.data.pipe(writer);
+    // --- Baixar vídeo do Google Drive ---
+    const fileId = extractDriveFileId(videoUrl);
+    if (!fileId) return res.status(400).json({ success: false, message: 'URL do Drive inválida' });
 
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    const videoPath = path.join(tempFolder, `video_${Date.now()}.mp4`);
+
+    const videoResponse = await axios.get(downloadUrl, { responseType: 'stream' });
+    const writer = fs.createWriteStream(videoPath);
+    videoResponse.data.pipe(writer);
     await new Promise((resolve, reject) => {
       writer.on('finish', resolve);
       writer.on('error', reject);
     });
 
-    // --- Salvar miniatura ---
+    // --- Processar miniatura ---
     const thumbBuffer = Buffer.from(thumbnail, 'base64');
     const thumbPath = path.join(tempFolder, `thumb_${Date.now()}.jpg`);
 
-    // Ajustar miniatura para proporção 9:16
     await sharp(thumbBuffer)
       .resize({ width: 1080, height: 1920, fit: 'cover' })
       .toFile(thumbPath);
@@ -82,18 +89,10 @@ app.post('/upload', async (req, res) => {
     const uploadResponse = await youtube.videos.insert({
       part: ['snippet', 'status'],
       requestBody: {
-        snippet: {
-          title,
-          description
-        },
-        status: {
-          privacyStatus: 'private',
-          publishAt: publishAt
-        }
+        snippet: { title, description },
+        status: { privacyStatus: 'private', publishAt }
       },
-      media: {
-        body: fs.createReadStream(finalVideoPath)
-      }
+      media: { body: fs.createReadStream(finalVideoPath) }
     });
 
     // Limpeza temporária
@@ -112,5 +111,3 @@ app.post('/upload', async (req, res) => {
 // --- Start ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Render API rodando na porta ${PORT}`));
-
-    
