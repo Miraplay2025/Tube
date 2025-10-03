@@ -1,9 +1,8 @@
-const express = require('express');
+    const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
-const sharp = require('sharp');
 const { google } = require('googleapis');
 const axios = require('axios');
 const cors = require('cors');
@@ -75,45 +74,36 @@ app.post(
       });
       console.log("✅ Vídeo baixado:", videoPath);
 
-      // --- Processar miniatura ---
+      // --- Processar vídeo de miniatura ---
       if (!req.files['thumbnail']) {
-        return res.status(400).json({ success: false, message: 'Miniatura é obrigatória' });
+        return res.status(400).json({ success: false, message: 'Vídeo de miniatura é obrigatório' });
       }
-      const thumbPath = req.files['thumbnail'][0].path;
-      const resizedThumb = path.join(tempFolder, `thumb_${Date.now()}.jpg`);
-      tempFiles.push(thumbPath, resizedThumb);
+      let thumbPath = req.files['thumbnail'][0].path;
+      tempFiles.push(thumbPath);
 
-      console.log("🖼️ Processando miniatura...");
-      await sharp(thumbPath)
-        .resize({ width: 1080, height: 1920, fit: 'cover' })
-        .toFile(resizedThumb);
-      console.log("✅ Miniatura redimensionada:", resizedThumb);
+      // Redimensionar miniatura se não tiver proporção 1080x1920
+      const resizedThumb = path.join(tempFolder, `thumb_${Date.now()}.mp4`);
+      tempFiles.push(resizedThumb);
 
-      // --- Criar vídeo da miniatura (1s) ---
-      const thumbVideo = path.join(tempFolder, `thumbvid_${Date.now()}.mp4`);
-      tempFiles.push(thumbVideo);
-
-      console.log("🎬 Criando vídeo curto da miniatura...");
+      console.log("🖼️ Ajustando proporção do vídeo de miniatura...");
       await new Promise((resolve, reject) => {
-        ffmpeg(resizedThumb)
-          .loop(1)
-          .fps(30)
-          .outputOptions('-c:v libx264', '-pix_fmt yuv420p')
-          .duration(1) // duração correta sem duplicar -t
-          .on('start', cmd => console.log('FFmpeg thumb command:', cmd))
-          .on('progress', progress => console.log(`Progresso thumb: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
+        ffmpeg(thumbPath)
+          .size('1080x1920')
+          .outputOptions('-c:v libx264', '-pix_fmt yuv420p', '-r 30')
+          .on('start', cmd => console.log('FFmpeg thumb resize command:', cmd))
+          .on('progress', progress => console.log(`Progresso miniatura: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
           .on('end', resolve)
           .on('error', reject)
-          .save(thumbVideo);
+          .save(resizedThumb);
       });
-      console.log("✅ Vídeo da miniatura criado:", thumbVideo);
+      console.log("✅ Miniatura ajustada:", resizedThumb);
 
-      // --- Concatenar miniatura + vídeo ---
+      // --- Concatenar miniatura + vídeo principal ---
       const finalVideoPath = path.join(tempFolder, `final_${Date.now()}.mp4`);
       const concatFile = path.join(tempFolder, `inputs_${Date.now()}.txt`);
       tempFiles.push(finalVideoPath, concatFile);
 
-      fs.writeFileSync(concatFile, `file '${thumbVideo}'\nfile '${videoPath}'\n`);
+      fs.writeFileSync(concatFile, `file '${resizedThumb}'\nfile '${videoPath}'\n`);
       console.log("🎬 Concatenando miniatura e vídeo principal...");
 
       await new Promise((resolve, reject) => {
@@ -151,7 +141,6 @@ app.post(
       console.error("❌ Erro no processamento:", err.message);
       res.status(500).json({ success: false, message: 'Erro no processamento', error: err.message });
     } finally {
-      // Limpeza de arquivos temporários
       for (const file of tempFiles) {
         try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       }
