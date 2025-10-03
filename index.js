@@ -39,17 +39,16 @@ app.post(
     { name: 'credentials', maxCount: 1 }
   ]),
   async (req, res) => {
-    const tempFiles = []; // lista de arquivos para exclusão depois
+    const tempFiles = [];
 
     try {
       const { title, description, publishAt, videoUrl } = req.body;
 
-      // Validar campos básicos
       if (!title || !description || !publishAt || !videoUrl) {
         return res.status(400).json({ success: false, message: 'Todos os campos de texto são obrigatórios' });
       }
 
-      // --- Carregar credenciais ---
+      // --- Credenciais ---
       if (!req.files['credentials']) {
         return res.status(400).json({ success: false, message: 'Arquivo de credenciais é obrigatório' });
       }
@@ -90,7 +89,7 @@ app.post(
         .toFile(resizedThumb);
       console.log("✅ Miniatura redimensionada:", resizedThumb);
 
-      // --- Criar vídeo final ---
+      // --- Criar vídeo final com miniatura incorporada ---
       const finalVideoPath = path.join(tempFolder, `final_${Date.now()}.mp4`);
       tempFiles.push(finalVideoPath);
 
@@ -98,15 +97,19 @@ app.post(
       await new Promise((resolve, reject) => {
         ffmpeg()
           .input(resizedThumb)
-          .loop(1)
+          .loop(1) // 1 segundo
           .input(videoPath)
           .complexFilter([
-            '[0:v]scale=1080:1920,setsar=1[thumb]; [1:v]scale=1080:1920,setsar=1[vid]; [thumb][vid]concat=n=2:v=1:a=0[outv]'
+            '[0:v]scale=1080:1920,setsar=1[thumb];' +
+            '[1:v]scale=1080:1920,setsar=1[vid];' +
+            '[thumb][vid]concat=n=2:v=1:a=0[outv]'
           ])
           .outputOptions('-map [outv]')
-          .save(finalVideoPath)
+          .on('start', cmd => console.log('FFmpeg command:', cmd))
+          .on('progress', progress => console.log(`Progresso: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
           .on('end', resolve)
-          .on('error', reject);
+          .on('error', reject)
+          .save(finalVideoPath);
       });
       console.log("✅ Vídeo final gerado:", finalVideoPath);
 
@@ -116,7 +119,6 @@ app.post(
       oauth2Client.setCredentials({ refresh_token });
 
       const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
-
       const uploadResponse = await youtube.videos.insert({
         part: ['snippet', 'status'],
         requestBody: {
@@ -127,24 +129,21 @@ app.post(
       });
 
       console.log("✅ Upload concluído. Video ID:", uploadResponse.data.id);
-
       res.json({ success: true, message: 'Vídeo enviado para o YouTube', videoId: uploadResponse.data.id });
+
     } catch (err) {
       console.error("❌ Erro no processamento:", err.message);
       res.status(500).json({ success: false, message: 'Erro no processamento', error: err.message });
     } finally {
-      // Limpeza dos arquivos temporários
+      // Limpeza de arquivos temporários
       for (const file of tempFiles) {
-        try {
-          if (fs.existsSync(file)) fs.unlinkSync(file);
-        } catch {}
+        try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch {}
       }
       console.log("🧹 Arquivos temporários limpos.");
     }
   }
 );
 
-// --- Start ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Render API rodando na porta ${PORT}`));
-    
+      
