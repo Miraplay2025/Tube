@@ -89,24 +89,40 @@ app.post(
         .toFile(resizedThumb);
       console.log("✅ Miniatura redimensionada:", resizedThumb);
 
-      // --- Criar vídeo final com miniatura incorporada ---
-      const finalVideoPath = path.join(tempFolder, `final_${Date.now()}.mp4`);
-      tempFiles.push(finalVideoPath);
+      // --- Criar vídeo da miniatura (1s) ---
+      const thumbVideo = path.join(tempFolder, `thumbvid_${Date.now()}.mp4`);
+      tempFiles.push(thumbVideo);
 
-      console.log("🎬 Gerando vídeo final com miniatura no início...");
+      console.log("🎬 Criando vídeo curto da miniatura...");
+      await new Promise((resolve, reject) => {
+        ffmpeg(resizedThumb)
+          .loop(1)
+          .fps(30)
+          .outputOptions('-c:v libx264', '-pix_fmt yuv420p')
+          .duration(1)
+          .on('start', cmd => console.log('FFmpeg thumb command:', cmd))
+          .on('progress', progress => console.log(`Progresso thumb: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
+          .on('end', resolve)
+          .on('error', reject)
+          .save(thumbVideo);
+      });
+      console.log("✅ Vídeo da miniatura criado:", thumbVideo);
+
+      // --- Concatenar miniatura + vídeo ---
+      const finalVideoPath = path.join(tempFolder, `final_${Date.now()}.mp4`);
+      const concatFile = path.join(tempFolder, `inputs_${Date.now()}.txt`);
+      tempFiles.push(finalVideoPath, concatFile);
+
+      fs.writeFileSync(concatFile, `file '${thumbVideo}'\nfile '${videoPath}'\n`);
+      console.log("🎬 Concatenando miniatura e vídeo principal...");
+
       await new Promise((resolve, reject) => {
         ffmpeg()
-          .input(resizedThumb)
-          .loop(1) // 1 segundo
-          .input(videoPath)
-          .complexFilter([
-            '[0:v]scale=1080:1920,setsar=1[thumb];' +
-            '[1:v]scale=1080:1920,setsar=1[vid];' +
-            '[thumb][vid]concat=n=2:v=1:a=0[outv]'
-          ])
-          .outputOptions('-map [outv]')
-          .on('start', cmd => console.log('FFmpeg command:', cmd))
-          .on('progress', progress => console.log(`Progresso: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
+          .input(concatFile)
+          .inputOptions('-f concat', '-safe 0')
+          .outputOptions('-c copy')
+          .on('start', cmd => console.log('FFmpeg concat command:', cmd))
+          .on('progress', progress => console.log(`Progresso concat: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
           .on('end', resolve)
           .on('error', reject)
           .save(finalVideoPath);
@@ -114,7 +130,7 @@ app.post(
       console.log("✅ Vídeo final gerado:", finalVideoPath);
 
       // --- Enviar para YouTube ---
-      console.log("📤 Enviando vídeo para YouTube...");
+      console.log("📤 Enviando vídeo para o YouTube...");
       const oauth2Client = new google.auth.OAuth2(client_id, client_secret);
       oauth2Client.setCredentials({ refresh_token });
 
