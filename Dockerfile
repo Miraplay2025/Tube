@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     unzip \
     git \
-    libonig-dev \       # necessário para mbstring
-    pkg-config \        # ajuda na detecção de pacotes
+    libonig-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Habilita extensões PHP necessárias
