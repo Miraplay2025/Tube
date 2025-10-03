@@ -1,61 +1,49 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-  <meta charset="UTF-8">
-  <title>Upload para YouTube</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial; }
-    body { background: #f4f6f9; color: #333; display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
-    .container { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 500px; width: 100%; }
-    h2 { text-align: center; margin-bottom: 20px; color: #444; }
-    label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 14px; }
-    input, textarea, button { width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; }
-    textarea { resize: vertical; min-height: 80px; }
-    button { background: #0073e6; color: white; font-size: 16px; border: none; cursor: pointer; transition: background 0.3s; }
-    button:hover { background: #005bb5; }
-    pre { background: #f9f9f9; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; border: 1px solid #ddd; }
-    @media (max-width: 600px) { body { padding: 10px; } .container { padding: 15px; } input, textarea, button { font-size: 15px; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload Vídeo YouTube</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; margin: auto; }
+input, button { width: 100%; margin: 10px 0; padding: 10px; }
+#log { white-space: pre-wrap; background: #f5f5f5; padding: 10px; max-height: 300px; overflow-y: auto; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h2>Upload para YouTube</h2>
-    <form id="uploadForm" enctype="multipart/form-data">
-      <label>Título:</label><input type="text" name="title" required>
-      <label>Descrição:</label><textarea name="description" required></textarea>
-      <label>Data de Publicação (ISO 8601):</label><input type="datetime-local" name="publishAt" required>
-      <label>Link do vídeo no Google Drive:</label><input type="text" name="videoUrl" placeholder="https://drive.google.com/..." required>
-      <label>Miniatura (imagem):</label><input type="file" name="thumbnail" accept="image/*" required>
-      <label>Credenciais (arquivo JSON):</label><input type="file" name="credentials" accept=".json" required>
-      <button type="submit">Enviar</button>
-    </form>
-    <pre id="output"></pre>
-  </div>
+<h2>Upload Vídeo YouTube</h2>
+<form id="form">
+  <input type="file" name="credentials" accept=".json" required>
+  <input type="text" name="title" placeholder="Título" required>
+  <textarea name="description" placeholder="Descrição" required></textarea>
+  <input type="text" name="publishAt" placeholder="Data de publicação (YYYY-MM-DDTHH:MM:SSZ)" required>
+  <input type="text" name="videoUrl" placeholder="URL do vídeo do Google Drive" required>
+  <input type="file" name="thumbnail" accept="video/*" required>
+  <button type="submit">Enviar</button>
+</form>
+<div id="log"></div>
 
-  <script>
-    const form = document.getElementById('uploadForm');
-    const output = document.getElementById('output');
+<script>
+const form = document.getElementById('form');
+const log = document.getElementById('log');
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
-      output.textContent = "⏳ Enviando...";
-
-      try {
-        const res = await fetch('/upload', { method: 'POST', body: formData });
-        let data;
-        try {
-          data = await res.json();
-          output.textContent = JSON.stringify(data, null, 2);
-        } catch {
-          const text = await res.text();
-          output.textContent = "Resposta não-JSON recebida:\n\n" + text;
-        }
-      } catch (err) {
-        output.textContent = "Erro: " + err.message;
-      }
-    });
-  </script>
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  log.textContent = 'Processando...\n';
+  const data = new FormData(form);
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: data });
+    const text = await res.text();
+    try { 
+      const json = JSON.parse(text);
+      log.textContent += JSON.stringify(json, null, 2);
+    } catch {
+      log.textContent += text;
+    }
+  } catch (err) {
+    log.textContent += 'Erro de rede: ' + err.message;
+  }
+});
+</script>
 </body>
 </html>
