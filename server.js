@@ -6,6 +6,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const sharp = require('sharp');
 const { google } = require('googleapis');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -25,19 +26,27 @@ app.post('/upload', async (req, res) => {
       title,
       description,
       publishAt,
-      video,
+      video_url,
       thumbnail
     } = req.body;
 
     // Validar campos obrigatórios
-    if (!client_id || !client_secret || !refresh_token || !title || !description || !publishAt || !video || !thumbnail) {
+    if (!client_id || !client_secret || !refresh_token || !title || !description || !publishAt || !video_url || !thumbnail) {
       return res.status(400).json({ success: false, message: 'Todos os campos são obrigatórios' });
     }
 
-    // --- Salvar vídeo ---
-    const videoBuffer = Buffer.from(video, 'base64');
+    // --- Download do vídeo do Google Drive ---
     const videoPath = path.join(tempFolder, `video_${Date.now()}.mp4`);
-    fs.writeFileSync(videoPath, videoBuffer);
+    const driveResponse = await axios.get(video_url, {
+      responseType: 'stream'
+    });
+    const writer = fs.createWriteStream(videoPath);
+    driveResponse.data.pipe(writer);
+
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
 
     // --- Salvar miniatura ---
     const thumbBuffer = Buffer.from(thumbnail, 'base64');
@@ -101,5 +110,7 @@ app.post('/upload', async (req, res) => {
 });
 
 // --- Start ---
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Render API rodando na porta ${PORT}`));
+
+    
