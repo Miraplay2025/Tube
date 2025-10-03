@@ -99,7 +99,7 @@ app.post(
           .loop(1)
           .fps(30)
           .outputOptions('-c:v libx264', '-pix_fmt yuv420p')
-          .duration(1)
+          .duration(1) // duração correta sem duplicar -t
           .on('start', cmd => console.log('FFmpeg thumb command:', cmd))
           .on('progress', progress => console.log(`Progresso thumb: ${progress.percent ? progress.percent.toFixed(2) : 0}%`))
           .on('end', resolve)
