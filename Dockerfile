@@ -1,19 +1,25 @@
-FROM node:20
+# Use imagem oficial PHP com Apache
+FROM php:8.2-apache
 
-# Criar pasta da aplicação
-WORKDIR /app
+# Instala dependências: ffmpeg, curl, unzip, git, etc
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    unzip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiar arquivos
-COPY package*.json ./
-RUN npm install
+# Habilita extensões PHP necessárias
+RUN docker-php-ext-install mbstring json
 
-COPY . .
+# Copia arquivos do projeto para o diretório padrão do Apache
+COPY . /var/www/html/
 
-# Instalar ffmpeg no container
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# Cria pasta para vídeos temporários
+RUN mkdir -p /var/www/html/videos && chmod -R 777 /var/www/html/videos
 
-# Porta exposta
-EXPOSE 3000
+# Expõe porta padrão do Apache
+EXPOSE 80
 
-# Comando para iniciar
-CMD ["npm", "start"]
+# Start Apache em foreground
+CMD ["apache2-foreground"]
